@@ -9,171 +9,30 @@ Usage:
 
   include drbd::base
 
-Require:
-
-  module kmod (git@github.com:camptocamp/puppet-kmod.git)
 
 */
+
 class drbd::base {
 
-  case $operatingsystem {
-
-    RedHat: {
-
-      case $lsbmajdistrelease {
-        "6": {
-          # Note: as CentOS 6 has not yet been released, we can't fetch drbd
-          # packages for RHEL 6 from there. This recipe fetches them from
-          # ATrpms. Maybe we can remove this differenciation once CentOS 6 is
-          # released.
-
-          yumrepo { "atrpms-drbd":
-            descr => "DRBD packages from ATrpms for RHEL ${lsbmajdistrelease}",
-	    baseurl => "http://dl.atrpms.net/el6-${architecture}/atrpms/stable",
+          yumrepo { "elrepo":
+            descr => "Elrepo",
+            baseurl => "http://elrepo.org/linux/testing/el6/\$basearch/",
             enabled => 1,
-            gpgkey => "http://packages.atrpms.net/RPM-GPG-KEY.atrpms",
-            gpgcheck => 1,
-            includepkgs => "drbd,drbd-kmdl-${kernelrelease}",
+            gpgcheck => 0,
           }
 
-          # ensure file is managed in case we want to purge /etc/yum.repos.d/
-          # http://projects.puppetlabs.com/issues/3152
-          file { "/etc/yum.repos.d/atrpms-drbd.repo":
-            ensure  => present,
-            mode    => 0644,
-            owner   => "root",
-            require => Yumrepo["atrpms-drbd"],
-          }
-
-          if $virtual == "xenu" {
-            fail "DRDB on a XEN instance not supported with RHEL6 yet, sorry."
-          }
-
-          package { "drbd":
-            ensure  => present,
-            require => [ Yumrepo["atrpms-drbd"], File["/etc/yum.repos.d/atrpms-drbd.repo"] ],
-          }
-
-          package { "drbd-kmdl-${kernelrelease}":
-            ensure  => present,
-            alias   => "drbd-module",
-            require => [ Yumrepo["atrpms-drbd"], File["/etc/yum.repos.d/atrpms-drbd.repo"] ],
-          }
-
-          # Should probably be created by the drbd package, but is not.
-          file { "/var/lib/drbd":
-            ensure => directory,
-          }
-
-        }
-        default: {
-
-          if ( ! $centos_mirror ) {
-            $centos_mirror = "http://mirror.switch.ch/ftp/mirror/centos/"
-          }
-
-          yumrepo { "centos-extra-drbd":
-            descr => "DRBD packages from Centos-extras for RHEL ${lsbmajdistrelease}",
-            baseurl => "${centos_mirror}${operatingsystemrelease}/extras/${architecture}/",
-            enabled => 1,
-            gpgkey => "${centos_mirror}/RPM-GPG-KEY-CentOS-${lsbmajdistrelease}",
-            gpgcheck => 1,
-            includepkgs => "drbd83,kmod-drbd83,kmod-drbd83-xen",
-          }
-
-          # ensure file is managed in case we want to purge /etc/yum.repos.d/
-          # http://projects.puppetlabs.com/issues/3152
-          file { "/etc/yum.repos.d/centos-extra-drbd.repo":
-            ensure  => present,
-            mode    => 0644,
-            owner   => "root",
-            require => Yumrepo["centos-extra-drbd"],
-          }
-
-          if $virtual == "xenu" {
-            $kmodpkg = "kmod-drbd83-xen"
-          } else {
-            $kmodpkg = "kmod-drbd83"
-          }
-
-          package { "drbd83":
+          package { "drbd83-utils":
             ensure  => present,
             alias   => "drbd",
-            require => Yumrepo["centos-extra-drbd"],
+            require => Yumrepo["elrepo"],
           }
 
-          package { $kmodpkg:
+          package { "kmod-drbd83":
             ensure  => present,
             alias   => "drbd-module",
-            require => Yumrepo["centos-extra-drbd"],
+            require => Yumrepo["elrepo"],
           }
-
-        }
-      }
-
-
-    }
-
-    Debian: {
-      case $lsbmajdistrelease {
-        "6": {
-
-          package { "drbd8-utils":
-            ensure  => present,
-            alias   => "drbd",
-          }
-
-        }
-      }
-    }
-
-    Ubuntu: {
-      package { "drbd8-utils":
-        ensure => present,
-        alias => "drbd",
-      }
-
-      package { "drbd8-source":
-        ensure => present,
-        alias => "drbd-module",
-      }
-    }
-  }
-
-  # Build kernel module, if needed
-  case $operatingsystem {
-
-    Debian: {
-
-      # this module is included in linux-image-* (kernel) package
-      kmod::install {'drbd': }
-
-      service { "drbd":
-        ensure    => running,
-        hasstatus => true,
-        restart   => "/etc/init.d/drbd reload",
-        enable    => true,
-        require   => [Package["drbd"], Kmod::Install['drbd']],
-      }
-    }
-
-    default: {
-
-      kmod::install {'drbd':
-        require => Package["drbd-module"],
-      }
-
-      service { "drbd":
-        ensure    => running,
-        hasstatus => true,
-        restart   => "/etc/init.d/drbd reload",
-        enable    => true,
-        require   => [Package["drbd"], Kmod::Install['drbd']],
-      }
-    }
-
-  }
-
+   
   # this file just includes other files
   file { "/etc/drbd.conf":
     ensure  => present,
@@ -183,8 +42,8 @@ class drbd::base {
 include "/etc/drbd.conf.d/*.conf";
 ',
     require => Package["drbd"],
-    before  => Service["drbd"],
-    notify  => Service["drbd"],
+    #before  => Service["drbd"],
+    #notify  => Service["drbd"],
   }
 
   # only allow files managed by puppet in this directory.
@@ -196,7 +55,7 @@ include "/etc/drbd.conf.d/*.conf";
     recurse => true,
     force   => true,
     require => Package["drbd"],
-    notify  => Service["drbd"],
+    #notify  => Service["drbd"],
   }
 
 }
